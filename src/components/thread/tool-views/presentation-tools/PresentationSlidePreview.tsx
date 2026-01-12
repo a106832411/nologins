@@ -69,34 +69,71 @@ export function PresentationSlidePreview({
 
       const urlWithCacheBust = `${metadataUrl}?t=${Date.now()}`;
       console.log(`[PresentationSlidePreview] Loading metadata (attempt ${retry + 1}):`, urlWithCacheBust);
-      
+
       const response = await fetch(urlWithCacheBust, {
         cache: 'no-cache',
-        headers: { 'Cache-Control': 'no-cache' },
+        credentials: 'include', // Include cookies for Daytona auth
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Accept': 'application/json',
+        },
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const responseText = await response.text();
+
+        // Validate that we got JSON, not HTML (Daytona warning page or error page)
+        const trimmed = responseText.trim();
+        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+          // Check if it's a Daytona warning page - this is a transient condition, retry
+          if (trimmed.includes('daytona.io') || trimmed.includes('Preview URL Warning')) {
+            console.log('[PresentationSlidePreview] Detected Daytona warning page, will retry...');
+            throw new Error('DAYTONA_WARNING_PAGE');
+          }
+          throw new Error(`Expected JSON but received HTML: ${trimmed.substring(0, 80)}`);
+        }
+
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          throw new Error(`Invalid JSON response: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        }
+
         console.log('[PresentationSlidePreview] Metadata loaded successfully:', data);
         setMetadata(data);
         setIsLoading(false);
         setError(null);
+      } else if (response.status === 404) {
+        // 404: File not found - don't retry, show error immediately
+        throw new Error('Presentation not found. Ensure the presentation has been created.');
+      } else if (response.status === 502 || response.status === 503 || response.status === 500) {
+        // 5xx errors: Sandbox might be starting, retry
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       console.error(`[PresentationSlidePreview] Error loading metadata (attempt ${retry + 1}):`, err);
-      
-      // Retry with exponential backoff if we haven't exceeded max retries
-      if (retry < maxRetries) {
-        const delay = Math.min(1000 * Math.pow(1.5, retry), 5000); // Cap at 5 seconds
+
+      // Don't retry for 404 errors (presentation doesn't exist)
+      const is404Error = errorMessage.includes('Presentation not found');
+      // DO retry for Daytona warning pages (transient, sandbox is initializing)
+      const isDaytonaWarning = errorMessage.includes('DAYTONA_WARNING_PAGE');
+
+      // Retry with exponential backoff if we haven't exceeded max retries and it's a transient error
+      if (retry < maxRetries && (!is404Error || isDaytonaWarning)) {
+        const delay = isDaytonaWarning
+          ? Math.min(1000 * Math.pow(2, retry), 10000) // Longer delays for Daytona warning (up to 10s)
+          : Math.min(1000 * Math.pow(1.5, retry), 5000); // Shorter delays for other errors
         console.log(`[PresentationSlidePreview] Retrying in ${delay}ms...`);
-        
+
         retryTimeoutRef.current = setTimeout(() => {
           loadMetadata(retry + 1);
         }, delay);
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to load presentation');
+        setError(errorMessage);
         setIsLoading(false);
       }
     }
@@ -104,7 +141,7 @@ export function PresentationSlidePreview({
 
   useEffect(() => {
     loadMetadata(0);
-    
+
     return () => {
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
@@ -154,7 +191,7 @@ export function PresentationSlidePreview({
     .sort((a, b) => a.number - b.number);
 
   // Find the slide to display: use initialSlide if provided, otherwise use first slide
-  const slideToDisplay = initialSlide 
+  const slideToDisplay = initialSlide
     ? slides.find(slide => slide.number === initialSlide) || slides[0]
     : slides[0];
 
