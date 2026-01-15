@@ -113,6 +113,7 @@ export async function downloadPresentation(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Daytona-Skip-Preview-Warning': 'true',
         },
         body: JSON.stringify({
           presentation_path: presentationPath,

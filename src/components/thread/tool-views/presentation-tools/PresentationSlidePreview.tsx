@@ -76,6 +76,7 @@ export function PresentationSlidePreview({
         headers: {
           'Cache-Control': 'no-cache',
           'Accept': 'application/json',
+          'X-Daytona-Skip-Preview-Warning': 'true',
         },
       });
 

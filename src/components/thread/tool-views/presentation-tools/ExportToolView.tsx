@@ -75,12 +75,12 @@ export function ExportToolView({
   const { isRestricted: isDownloadRestricted, openUpgradeModal } = useDownloadRestriction({
     featureName: 'exports',
   });
-  
+
   const [downloadingFormat, setDownloadingFormat] = useState<ExportFormat | null>(null);
 
   const name = toolCall?.function_name?.replace(/_/g, '-').toLowerCase() || 'export-presentation';
   const isUnifiedExport = name === 'export-presentation' || name === 'export_presentation';
-  
+
   const {
     presentationName,
     exports,
@@ -91,7 +91,7 @@ export function ExportToolView({
       try {
         const output = toolResult.output;
         const parsed = typeof output === 'string' ? JSON.parse(output) : output;
-        
+
         if (isUnifiedExport && parsed.exports) {
           return {
             presentationName: parsed.presentation_name || toolCall?.arguments?.presentation_name,
@@ -100,7 +100,7 @@ export function ExportToolView({
             partialSuccess: parsed.partial_success
           };
         }
-        
+
         const format: ExportFormat = name.includes('pdf') ? 'pdf' : 'pptx';
         const config = formatConfigs[format];
         return {
@@ -121,7 +121,7 @@ export function ExportToolView({
     }
     return { presentationName: toolCall?.arguments?.presentation_name };
   }, [toolResult, name, isUnifiedExport, toolCall?.arguments]);
-  
+
   const availableExports = exports ? Object.keys(exports) as ExportFormat[] : [];
   const hasPptx = availableExports.includes('pptx');
   const hasPdf = availableExports.includes('pdf');
@@ -142,8 +142,8 @@ export function ExportToolView({
     try {
       await downloadPresentation(
         downloadFormat,
-        project.sandbox.sandbox_url, 
-        `/workspace/presentations/${presentationName}`, 
+        project.sandbox.sandbox_url,
+        `/workspace/presentations/${presentationName}`,
         presentationName
       );
       toast.success(`Downloaded ${format.toUpperCase()} successfully`);
@@ -160,30 +160,31 @@ export function ExportToolView({
       openUpgradeModal();
       return;
     }
-    
+
     const exportData = exports?.[format];
     if (!exportData?.download_url || !project?.sandbox?.id) return;
-    
+
     try {
       setDownloadingFormat(format);
-      
+
       const config = formatConfigs[format];
       const filename = exportData.download_url.split('/').pop() || `presentation${config.defaultExtension}`;
-      
+
       const headers: Record<string, string> = {};
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
-      
+      headers['X-Daytona-Skip-Preview-Warning'] = 'true';
+
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/sandboxes/${project.sandbox.id}/files/content?path=${encodeURIComponent(exportData.download_url)}`,
         { headers }
       );
-      
+
       if (!response.ok) {
         throw new Error(`Failed to download: ${response.status}`);
       }
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -193,7 +194,7 @@ export function ExportToolView({
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      
+
       toast.success(`Downloaded ${filename}`);
     } catch (error) {
       console.error('Error downloading file:', error);
@@ -208,7 +209,7 @@ export function ExportToolView({
     const Icon = config.icon;
     const exportData = exports?.[format];
     const isLoading = downloadingFormat === format;
-    
+
     return (
       <Button
         key={format}
@@ -328,7 +329,7 @@ export function ExportToolView({
         <div className="space-y-3">
           {hasPdf && renderDownloadButton('pdf')}
           {hasPptx && renderDownloadButton('pptx')}
-          
+
           {!hasPdf && !hasPptx && (
             <div className="text-center py-8 text-muted-foreground">
               <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-amber-500" />

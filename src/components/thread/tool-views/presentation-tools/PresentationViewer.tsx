@@ -83,19 +83,19 @@ export function PresentationViewer({
   const hasLoadedRef = useRef(false);
   const sandboxCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isEnsuringSandboxRef = useRef(false);
-  
+
   // Cache metadata by presentation name to avoid re-loading when switching between tool calls
   const metadataCacheRef = useRef<Map<string, PresentationMetadata>>(new Map());
   const lastPresentationNameRef = useRef<string | null>(null);
 
   const [visibleSlide, setVisibleSlide] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  
+
   // Download restriction for free tier users
   const { isRestricted: isDownloadRestricted, openUpgradeModal } = useDownloadRestriction({
     featureName: 'presentations',
   });
-  
+
   // Use shared modal store for full screen viewer
   const { isOpen, presentationName, sandboxUrl, initialSlide, openPresentation, closePresentation } = usePresentationViewerStore();
   const viewerState = { isOpen, presentationName, sandboxUrl, initialSlide };
@@ -110,7 +110,7 @@ export function PresentationViewer({
   if (toolResult?.output) {
     try {
       let output = toolResult.output;
-      
+
       // Handle string output
       if (typeof output === 'string') {
         // Check if the string looks like an error message
@@ -128,7 +128,7 @@ export function PresentationViewer({
           }
         }
       }
-      
+
       // Only extract data if we have a valid parsed object
       if (output && typeof output === 'object' && !toolExecutionError) {
         extractedPresentationName = output.presentation_name;
@@ -160,7 +160,7 @@ export function PresentationViewer({
     }
 
     isEnsuringSandboxRef.current = true;
-    
+
     try {
       const response = await backendApi.post(
         `/project/${project.id}/sandbox/ensure-active`,
@@ -173,12 +173,12 @@ export function PresentationViewer({
         isEnsuringSandboxRef.current = false;
         return;
       }
-      
+
       // Dispatch event for other components
       window.dispatchEvent(new CustomEvent('sandbox-active', {
         detail: { sandboxId: project.sandbox.id, projectId: project.id }
       }));
-      
+
       isEnsuringSandboxRef.current = false;
     } catch (err) {
       console.error('Error ensuring sandbox is active:', err);
@@ -195,10 +195,10 @@ export function PresentationViewer({
     }
 
     const sanitizedPresentationName = sanitizeFilename(extractedPresentationName);
-    
+
     // Check if we have cached metadata for this presentation
     const cachedMetadata = metadataCacheRef.current.get(sanitizedPresentationName);
-    
+
     // If we have cached data and this is not a force refresh, use it immediately
     if (cachedMetadata && !forceRefresh) {
       setMetadata(cachedMetadata);
@@ -208,53 +208,54 @@ export function PresentationViewer({
       loadMetadata(0, maxRetries, true);
       return;
     }
-    
+
     // Only show loading if we don't have any cached data
     if (!cachedMetadata) {
       setIsLoadingMetadata(true);
     }
     setError(null);
     setRetryAttempt(retryCount);
-    
+
     try {
       const metadataUrl = constructHtmlPreviewUrl(
-        project.sandbox.sandbox_url, 
+        project.sandbox.sandbox_url,
         `presentations/${sanitizedPresentationName}/metadata.json`
       );
-      
+
       // Add cache-busting parameter to ensure fresh data
       const urlWithCacheBust = `${metadataUrl}?t=${Date.now()}`;
-      
+
       const response = await fetch(urlWithCacheBust, {
         cache: 'no-cache',
         headers: {
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache',
+          'X-Daytona-Skip-Preview-Warning': 'true'
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        
+
         // Cache the metadata
         metadataCacheRef.current.set(sanitizedPresentationName, data);
-        
+
         setMetadata(data);
         hasLoadedRef.current = true;
         setIsLoadingMetadata(false);
-        
+
         // Clear any pending retry timeout on success
         if (retryTimeoutRef.current) {
           clearTimeout(retryTimeoutRef.current);
           retryTimeoutRef.current = null;
         }
-        
+
         return; // Success, exit early
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (err) {
       console.error(`Error loading metadata (attempt ${retryCount + 1}):`, err);
-      
+
       // If we get HTTP 400 or 502, the sandbox might be stopped - try to wake it up
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (errorMessage.includes('400') || errorMessage.includes('502') || errorMessage.includes('503')) {
@@ -263,22 +264,22 @@ export function PresentationViewer({
         // Trigger sandbox wake-up
         ensureSandboxActive();
       }
-      
+
       // If we have cached data, don't show loading state during retries
       if (cachedMetadata) {
         setIsLoadingMetadata(false);
       }
-      
+
       // Calculate delay with exponential backoff, capped at 10 seconds
-      const delay = retryCount < 5 
+      const delay = retryCount < 5
         ? Math.min(1000 * Math.pow(2, retryCount), 10000)
         : 5000;
-      
+
       // Keep retrying indefinitely - don't set error state
       retryTimeoutRef.current = setTimeout(() => {
         loadMetadata(retryCount + 1, maxRetries, forceRefresh);
       }, delay);
-      
+
       return;
     }
   }, [extractedPresentationName, project?.sandbox?.sandbox_url, ensureSandboxActive]);
@@ -324,19 +325,19 @@ export function PresentationViewer({
     // Check if presentation changed
     const sanitizedName = extractedPresentationName ? sanitizeFilename(extractedPresentationName) : null;
     const presentationChanged = sanitizedName !== lastPresentationNameRef.current;
-    
+
     // Only reset loaded flag if presentation actually changed
     if (presentationChanged) {
       hasLoadedRef.current = false;
       lastPresentationNameRef.current = sanitizedName;
     }
-    
+
     // Clear any existing retry timeout when dependencies change
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
       retryTimeoutRef.current = null;
     }
-    
+
     // Only start loading if we have the required data
     if (extractedPresentationName && project?.sandbox?.sandbox_url) {
       loadMetadata();
@@ -376,7 +377,7 @@ export function PresentationViewer({
   }, [toolCallKey]);
 
   const slides = metadata ? Object.entries(metadata.slides)
-      .map(([num, slide]) => ({ number: parseInt(num), ...slide }))
+    .map(([num, slide]) => ({ number: parseInt(num), ...slide }))
     .sort((a, b) => a.number - b.number) : [];
 
   // Scroll to current slide when metadata loads or when tool content changes
@@ -400,7 +401,7 @@ export function PresentationViewer({
     setVisibleSlide(slides[0].number);
 
     const handleScroll = () => {
-      
+
       const scrollArea = document.querySelector('[data-radix-scroll-area-viewport]');
       if (!scrollArea || slides.length === 0) return;
 
@@ -433,8 +434,8 @@ export function PresentationViewer({
         const distanceFromCenter = Math.abs(slideCenter - viewportCenter);
 
         // Only consider slides that are at least partially visible
-        const isPartiallyVisible = slideRect.bottom > scrollViewportRect.top && 
-                                 slideRect.top < scrollViewportRect.bottom;
+        const isPartiallyVisible = slideRect.bottom > scrollViewportRect.top &&
+          slideRect.top < scrollViewportRect.bottom;
 
         if (isPartiallyVisible && distanceFromCenter < smallestDistance) {
           smallestDistance = distanceFromCenter;
@@ -470,13 +471,13 @@ export function PresentationViewer({
   // Helper function to scroll to current slide
   const scrollToCurrentSlide = (delay: number = 200) => {
     if (!currentSlideNumber || !metadata) return;
-    
+
     setTimeout(() => {
       const slideElement = document.getElementById(`slide-${currentSlideNumber}`);
-      
+
       if (slideElement) {
-        slideElement.scrollIntoView({ 
-          behavior: 'smooth', 
+        slideElement.scrollIntoView({
+          behavior: 'smooth',
           block: 'center',
           inline: 'nearest'
         });
@@ -485,8 +486,8 @@ export function PresentationViewer({
         setTimeout(() => {
           const retryElement = document.getElementById(`slide-${currentSlideNumber}`);
           if (retryElement) {
-            retryElement.scrollIntoView({ 
-              behavior: 'smooth', 
+            retryElement.scrollIntoView({
+              behavior: 'smooth',
               block: 'center',
               inline: 'nearest'
             });
@@ -502,18 +503,18 @@ export function PresentationViewer({
       openUpgradeModal();
       return;
     }
-    
+
     if (!project?.sandbox?.sandbox_url || !extractedPresentationName) return;
 
     setIsDownloading(true);
-    try{
-      if (format === DownloadFormat.GOOGLE_SLIDES){
+    try {
+      if (format === DownloadFormat.GOOGLE_SLIDES) {
         const result = await handleGoogleSlidesUpload(project!.sandbox!.sandbox_url, `/workspace/presentations/${extractedPresentationName}`);
         // If redirected to auth, don't show error
         if (result?.redirected_to_auth) {
           return; // Don't set loading false, user is being redirected
         }
-      } else{
+      } else {
         await downloadPresentation(format, project.sandbox.sandbox_url, `/workspace/presentations/${extractedPresentationName}`, extractedPresentationName);
       }
     } catch (error) {
@@ -522,7 +523,7 @@ export function PresentationViewer({
       setIsDownloading(false);
     }
   };
-  
+
 
   return (
     <Card className="gap-0 flex border shadow-none border-t border-b-0 border-x-0 p-0 rounded-none flex-col h-full overflow-hidden bg-card">
@@ -560,12 +561,12 @@ export function PresentationViewer({
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Button>
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       className="h-8 w-8 p-0"
                       title="Export presentation"
                       disabled={isDownloading}
@@ -578,7 +579,7 @@ export function PresentationViewer({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-32">
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => handleDownload(setIsDownloading, DownloadFormat.PDF)}
                       className="cursor-pointer"
                       disabled={isDownloading}
@@ -586,7 +587,7 @@ export function PresentationViewer({
                       <FileText className="h-4 w-4 mr-2" />
                       PDF
                     </DropdownMenuItem>
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => handleDownload(setIsDownloading, DownloadFormat.PPTX)}
                       className="cursor-pointer"
                       disabled={isDownloading}
@@ -594,7 +595,7 @@ export function PresentationViewer({
                       <Presentation className="h-4 w-4 mr-2" />
                       PPTX
                     </DropdownMenuItem>
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => handleDownload(setIsDownloading, DownloadFormat.GOOGLE_SLIDES)}
                       className="cursor-pointer"
                       disabled={isDownloading}
@@ -651,8 +652,8 @@ export function PresentationViewer({
               The presentation tool encountered an error during execution:
             </p>
             <div className="w-full max-w-2xl">
-              <CodeBlockCode 
-                code={toolExecutionError} 
+              <CodeBlockCode
+                code={toolExecutionError}
                 language="text"
                 className="text-xs bg-zinc-100 dark:bg-zinc-800 p-3 rounded-md border"
               />
