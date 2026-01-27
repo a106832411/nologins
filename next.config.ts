@@ -33,7 +33,7 @@ const nextConfig = (): NextConfig => ({
     return [
       {
         source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_URL}/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/:path*`,
       },
       {
         source: '/ingest/static/:path*',
